@@ -1,0 +1,177 @@
+package datawarehouse;
+
+import java.io.IOException;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class CrawlData {
+
+	public static void main(String[] args) throws IOException {
+		String link = "https://www.pnj.com.vn/blog/gia-vang/";
+		Document doc = Jsoup.connect(link).timeout(5000).get();
+		
+		Elements links = doc.select("tbody[id=content-price]")
+	
+		for(Elements li:links) {
+			String title = li.select("tr > td")
+		}
+	}
+}
+<tbody id="content-price">
+<tr>
+<td>Vàng miếng SJC 999.9</td>
+<td>
+<span>7,050</span>
+</td>
+<td>
+<span>7,120</span>
+</td>
+</tr>
+<tr>
+<td>Nhẫn Trơn PNJ 999.9</td>
+<td>
+<span>5,940</span>
+</td>
+<td>
+<span>6,040</span>
+</td>
+</tr>
+<tr>
+<td>Vàng Kim Bảo 999.9</td>
+<td>
+<span>5,940</span>
+</td>
+<td>
+<span>6,040</span>
+</td>
+</tr>
+<tr>
+<td>Vàng Phúc Lộc Tài 999.9</td>
+<td>
+<span>5,940</span>
+</td>
+<td>
+<span>6,050</span>
+</td>
+</tr>
+<tr>
+<td>Vàng nữ trang 999.9</td>
+<td>
+<span>5,930</span>
+</td>
+<td>
+<span>6,010</span>
+</td>
+</tr>
+<tr>
+<td>Vàng nữ trang 999</td>
+<td>
+<span>5,924</span>
+</td>
+<td>
+<span>6,004</span>
+</td>
+</tr>
+<tr>
+<td>Vàng nữ trang 99</td>
+<td>
+<span>5,860</span>
+</td>
+<td>
+<span>5,960</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 750 (18K)</td>
+<td>
+<span>4,383</span>
+</td>
+<td>
+<span>4,523</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 585 (14K)</td>
+<td>
+<span>3,391</span>
+</td>
+<td>
+<span>3,531</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 416 (10K)</td>
+<td>
+<span>2,375</span>
+</td>
+<td>
+<span>2,515</span>
+</td>
+</tr>
+<tr>
+<td>Vàng miếng PNJ (999.9)</td>
+<td>
+<span>5,940</span>
+</td>
+<td>
+<span>6,050</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 916 (22K)</td>
+<td>
+<span>5,465</span>
+</td>
+<td>
+<span>5,515</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 650 (15.6K)</td>
+<td>
+<span>3,782</span>
+</td>
+<td>
+<span>3,922</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 680 (16.3K)</td>
+<td>
+<span>3,962</span>
+</td>
+<td>
+<span>4,102</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 610 (14.6K)</td>
+<td>
+<span>3,541</span>
+</td>
+<td>
+<span>3,681</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 375 (9K)</td>
+<td>
+<span>2,129</span>
+</td>
+<td>
+<span>2,269</span>
+</td>
+</tr>
+<tr>
+<td>Vàng 333 (8K)</td>
+<td>
+<span>1,858</span>
+</td>
+<td>
+<span>1,998</span>
+</td>
+</tr>
+</tbody>

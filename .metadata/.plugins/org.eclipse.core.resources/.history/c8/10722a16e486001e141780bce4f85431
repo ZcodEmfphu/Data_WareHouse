@@ -1,0 +1,25 @@
+package datawarehouse;
+
+import java.io.IOException;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class CrawlData {
+
+	public static void main(String[] args) throws IOException {
+		String link = "https://sextop1.info/";
+		Document doc = Jsoup.connect(link).timeout(5000).get();
+		Element page =doc.select("span[class=page-numbers current]").first();
+		int n=10;
+		for(int i=1;i<page;i++) {
+			Document docPage = Jsoup.connect(link+"page/"+i+"/").timeout(5000).get();
+			Elements elementPage = docPage.select("h2[class=entry-title]");
+			for(int j=0; j<elementPage.size();j++) {
+				System.out.println(elementPage.get(j).ownText());
+			}
+		}
+	}
+}

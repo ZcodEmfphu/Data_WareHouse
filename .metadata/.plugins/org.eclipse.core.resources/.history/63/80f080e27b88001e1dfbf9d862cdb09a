@@ -1,0 +1,19 @@
+package datawarehouse;
+
+import java.io.IOException;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+public class CrawlData {
+
+	public static void main(String[] args) throws IOException {
+		String link = "https://www.pnj.com.vn/blog/gia-vang/";
+		Document doc = Jsoup.connect(link).timeout(10000).get();
+		
+		Elements links = doc.select("tr");
+	    System.out.println(links);
+	}
+}

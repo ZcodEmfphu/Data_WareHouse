@@ -6,6 +6,7 @@
 			<attribute name="module" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="C:/Users/DELL/Downloads/jsoup-1.16.2.jar"/>
+	<classpathentry kind="lib" path="C:/Users/DELL/Downloads/mysql-connector-j-8.0.32-javadoc.jar"/>
+	<classpathentry kind="lib" path="lib/sqljdbc_12.4.2.0_enu.zip"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

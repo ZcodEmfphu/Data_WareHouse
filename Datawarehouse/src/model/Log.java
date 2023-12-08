@@ -27,8 +27,7 @@ public class Log {
 			insertLogStatement.setInt(4, configId);
 			insertLogStatement.setInt(5, status);
 
-			insertLogStatement.executeUpdate();
-			System.out.println("Log inserted successfully.");
+			insertLogStatement.executeUpdate();			
 		} catch (SQLException e) {
 			System.err.println("Error inserting log: " + e.getMessage());
 		}

@@ -17,4 +17,14 @@
     <fullyQualifiedTypeName name="java.io.InputStream"/>
     <fullyQualifiedTypeName name="java.io.IOException"/>
     <fullyQualifiedTypeName name="java.util.Objects"/>
+    <fullyQualifiedTypeName name="Controller.DataWareHouse"/>
+    <fullyQualifiedTypeName name="model.DataWareHouse"/>
+    <fullyQualifiedTypeName name="controller.Log"/>
+    <fullyQualifiedTypeName name="controller.Config"/>
+    <fullyQualifiedTypeName name="java.util.concurrent.ScheduledExecutorService"/>
+    <fullyQualifiedTypeName name="java.util.concurrent.Executors"/>
+    <fullyQualifiedTypeName name="java.util.concurrent.TimeUnit"/>
+    <fullyQualifiedTypeName name="java.util.Timer"/>
+    <fullyQualifiedTypeName name="java.util.TimerTask"/>
+    <fullyQualifiedTypeName name="controller.LoadFromTempToDataWareHouse"/>
 </qualifiedTypeNameHistroy>

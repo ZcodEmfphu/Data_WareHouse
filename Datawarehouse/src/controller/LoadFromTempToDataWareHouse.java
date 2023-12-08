@@ -12,6 +12,11 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,71 +28,88 @@ public class LoadFromTempToDataWareHouse {
 
 	private static Log log = new Log();
 	private static Config cof = new Config();
+	private static long startTime = System.currentTimeMillis();
+	private static long duration = 1 * 60 * 1000;
 
 //	1. Xóa dữ liệu trong bảng fact
 	public static void truncateProductFactTable() {
+		// 1.1. Kết nối với datawarehouse database
 		try (Connection dataWarehouseConnection = cof.getConnectionFromProperties("datawarehouse")) {
 			String truncateQuery = "TRUNCATE TABLE product_fact";
-
+			// 1.2.1. Thực thi câu lệnh
 			try (PreparedStatement truncateStatement = dataWarehouseConnection.prepareStatement(truncateQuery)) {
 				truncateStatement.executeUpdate();
-				System.out.println("Table product_fact truncated successfully.");
+				// 1.3.1. Ghi log hệ thống về việc tranform(update) dữ liệu mới
+				log.insertLog("Update", "Update Product_Fact thành công", 1, 5);
 			} catch (SQLException e) {
-				System.err.println("Error while truncating table product_fact: " + e.getMessage());
+				// 1.3.2. Ghi log về sự cố lỗi khi update dữ liệu
+				log.insertLog("Update", "Error while update Product_Fact", 1, 10);
 			}
 		} catch (SQLException e) {
-			System.err.println("Error connecting to the database: " + e.getMessage());
+			// 1.2.2. Kết nối với datawarehouse database lỗi
+			log.insertLog("Connect", "Error while connect to Datawarehouse", 1, 10);
+			log.logError("Error while connect to Datawarehouse" + e.getMessage(), e);
 		}
 	}
 
 //2. Load dữ liệu vào bảng product_dim
 	public static void insertDataFromTempToProductDim() {
+		// 2.1. Kết nối với staging databases và datawarehouse database
 		try (Connection stagingConnection = cof.getConnectionFromProperties("staging");
 				Connection dataWarehouseConnection = cof.getConnectionFromProperties("datawarehouse")) {
-
+			// Câu lệnh query insert dữ liệu vào product_dim của datawarehouse database
 			String insertQuery = "INSERT INTO Product_dim (id, p_id, Name, time) VALUES (?, ?, ?, NOW())";
+			// Câu lệnh query chọn id và Product từ table temp của staging database
 			String selectQuery = "SELECT Id, Product FROM TEMP";
-
+			// 2.2.1. Thực thi câu lệnh
 			try (PreparedStatement selectStatement = stagingConnection.prepareStatement(selectQuery);
 					PreparedStatement insertStatement = dataWarehouseConnection.prepareStatement(insertQuery)) {
-
 				ResultSet resultSet = selectStatement.executeQuery();
+				// Chạy vòng lặp để duyệt từng phần tử trong database
 				while (resultSet.next()) {
 					int id = resultSet.getInt("Id");
 					String product = resultSet.getString("Product");
 					insertStatement.setInt(1, id);
 					insertStatement.setInt(2, id);
 					insertStatement.setString(3, product);
+
 					insertStatement.executeUpdate();
 				}
-				System.out.println("Data loaded from TEMP to Product_dim successfully.");
+				// 2.3.1. Ghi log hệ thống về việc tranform dữ liệu mới
+				log.insertLog("Transform", "Transform dữ liệu từ Temp đến Product_dim thành công", 1, 6);
 			} catch (SQLException e) {
-				System.err.println("Error while loading data from TEMP to Product_dim: " + e.getMessage());
+				// 2.3.2. Ghi log hệ thống về việc tranform dữ liệu lỗi
+				log.insertLog("Transform", "Transform dữ liệu từ Temp đến Product_dim thất bại", 1, 10);
 			}
 		} catch (SQLException e) {
-			System.err.println("Error connecting to databases: " + e.getMessage());
+			// 2.2.2. Ghi log hệ thống về việc kết nối với database thất bại
+			log.logError("Error while connect to Datawarehouse or Staging" + e.getMessage(), e);
 		}
 	}
 
-//5. Kiểm tra sản phẩm tồn tại 	
+//3. Kiểm tra sản phẩm tồn tại 	
 	public static boolean hasDataInProductDim() {
+		// Kiểm tra kết nối với datawarehouse database
 		try (Connection dataWarehouseConnection = cof.getConnectionFromProperties("datawarehouse")) {
+			// Câu lệnh đếm số sản phẩm trong table product_dim của datawareehouse database
 			String countQuery = "SELECT COUNT(*) FROM Product_dim";
+			// Thực thi câu lệnh
 			try (PreparedStatement countStatement = dataWarehouseConnection.prepareStatement(countQuery)) {
 				ResultSet resultSet = countStatement.executeQuery();
+				// Nếu kết quả phẩn tử đầu tiên
 				if (resultSet.next()) {
-					int count = resultSet.getInt(1);
-					return count > 0;
+					int count = resultSet.getInt(1);// Có tồn tại
+					return count > 0;// Trả về lớn hơn 0
 				}
 			}
 		} catch (SQLException e) {
-			log.logError("Error checking data in Product_dim: " + e.getMessage(), e);
-			log.insertLog("Tranfer", e.getMessage(), 1, 10);
+			//Thông báo lỗi log hệ thống 
+			log.logError("Error checking data in Product_dim: " + e.getMessage(), e);			
 		}
 		return false;
 	}
 
-//6. Update dữ liệu từ staging sang product_dim
+//4. Update dữ liệu từ staging sang product_dim
 	public static void updateDataFromTempToProductDim() {
 		try (Connection stagingConnection = cof.getConnectionFromProperties("staging");
 				Connection dataWarehouseConnection = cof.getConnectionFromProperties("datawarehouse")) {
@@ -130,7 +152,7 @@ public class LoadFromTempToDataWareHouse {
 		}
 	}
 
-//7. Load Data từ Temp sang Table Product_dim
+//5. Load Data từ Temp sang Table Product_dim
 	public static void loadDataFromTempToProductDim() {
 		try {
 			// Check if Product_dim has data
@@ -147,7 +169,7 @@ public class LoadFromTempToDataWareHouse {
 		}
 	}
 
-//8. Kiểm tra tương thích dữ liệu
+//6. Kiểm tra tương thích dữ liệu
 	private static String getProductNameFromProductDim(Connection connection, int id) throws SQLException {
 		String selectQuery = "SELECT Name FROM Product_dim WHERE id = ?";
 		try (PreparedStatement selectStatement = connection.prepareStatement(selectQuery)) {
@@ -161,14 +183,50 @@ public class LoadFromTempToDataWareHouse {
 		}
 	}
 
-//5. Load dữ liệu từ staging sang Datawarehouse
+//7.Kiểm tra trạng thái của log
+	public boolean latestLogHasStatus() {
+		try (Connection dataWarehouseConnection = cof.getConnectionFromProperties("control")) {
+			String query = "SELECT l.Status FROM Log l ORDER BY l.Time DESC LIMIT 1";
+			try (PreparedStatement preparedStatement = dataWarehouseConnection.prepareStatement(query);
+					ResultSet resultSet = preparedStatement.executeQuery()) {
+				if (resultSet.next()) {
+					int latestStatus = resultSet.getInt("Status");
+					log.logInfo("Latest Log Status: " + latestStatus);
+
+					return latestStatus == 7;
+				} else {
+					log.logInfo("No log entries found.");
+					return false;
+				}
+			}
+		} catch (SQLException e) {
+			log.logError("Error while checking latest log status: " + e.getMessage(), e);
+			return false;
+		}
+	}
+
+//9. Load dữ liệu từ staging sang Datawarehouse
 	public void loadDataFromTempToDataWarehouse() {
 
-		truncateProductFactTable();
+		if (latestLogHasStatus()) {
+			log.logInfo("Stopping data loading because the latest log has Status ID 7.");
+			return;
+		}
 
+		log.insertLog("Loading", "Data Loading TEMP to Product_fact ", 1, 7);
+		log.logInfo("Loading....");
+
+		while (System.currentTimeMillis() - startTime < duration) {
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		truncateProductFactTable();
 		loadDataFromTempToProductDim();
 
-		log.insertLog("Loading", "Data TEMP to Product_fact Loading....", 1, 7);
 		try (Connection stagingConnection = cof.getConnectionFromProperties("staging");
 				Connection dataWarehouseConnection = cof.getConnectionFromProperties("datawarehouse")) {
 
@@ -183,12 +241,13 @@ public class LoadFromTempToDataWareHouse {
 					ResultSet resultSet = selectStatement.executeQuery();
 					PreparedStatement insertStatement = dataWarehouseConnection.prepareStatement(insertQuery)) {
 
-				while (resultSet.next()) {
+				while (resultSet.next() && (System.currentTimeMillis() - startTime) < (3 * 60 * 1000)) {
 					int dateId = resultSet.getInt("d_id");
 					int tempId = resultSet.getInt("Id");
 					String time = resultSet.getString("Time");
 					String buyingPrice = resultSet.getString("BuyingPrice");
 					String sellingPrice = resultSet.getString("SellingPrice");
+
 					insertStatement.setInt(1, dateId);
 					insertStatement.setString(2, time);
 					insertStatement.setInt(3, tempId);
@@ -197,133 +256,17 @@ public class LoadFromTempToDataWareHouse {
 
 					insertStatement.executeUpdate();
 				}
-				log.logInfo("Data loaded from TEMP to Product_fact successfully.");
-				log.insertLog("Load Data", "Data loaded from TEMP to Product_fact successfully.", 1, 8);
 
+				log.logInfo("Data loaded from TEMP to Product_fact successfully.");
+				log.insertLog("Loaded", "Data loaded from TEMP to Product_fact successfully.", 1, 8);
 			} catch (SQLException e) {
-				System.err.println("Error while loading data from TEMP to Product_fact: " + e.getMessage());
 				log.logError("Error while loading data from TEMP to Product_fact: " + e.getMessage(), e);
 				log.insertLog("Load Data", "Error while loading data from TEMP to Product_fact: " + e.getMessage(), 1,
 						9);
 			}
-
 		} catch (SQLException e) {
-			System.err.println("Error connecting to databases: " + e.getMessage());
 			log.logError("Unexpected error: " + e.getMessage(), e);
 			log.insertLog("Load Data", "Unexpected error: " + e.getMessage(), 1, 9);
-		}
-
-	}
-
-// Load datawarehouse vào datatamart
-	public static void LoadDatawarehouseToDataMart() {
-		try {
-			// Connect to Data Warehouse
-			Connection dwConnection = cof.getConnectionFromProperties("datawarehouse");
-			// Extract data from Data Warehouse
-			updateDateEx();
-
-			String dwQuery = "SELECT dd.full_date AS Date_ef, CURTIME() AS Time, '2999-12-31' AS Date_ex, pf.Product_Id, pd.Name AS Product_Name, pf.BuyingPrice, pf.SellingPrice "
-					+ "FROM GiaVang_DataWarehouse.Product_fact pf "
-					+ "JOIN GiaVang_DataWarehouse.Product_dim pd ON pf.Product_Id = pd.p_id "
-					+ "JOIN GiaVang_DataWarehouse.Date_dim dd ON pf.Date_Id = dd.d_id";
-
-			try (PreparedStatement dwStatement = dwConnection.prepareStatement(dwQuery);
-					ResultSet resultSet = dwStatement.executeQuery()) {
-
-				// Connect to Data Mart
-				Connection dmConnection = cof.getConnectionFromProperties("datamart");
-
-				try {
-					// Disable autocommit for Data Mart connection
-					dmConnection.setAutoCommit(false);
-
-					// Insert data into Data Mart
-					String dmQuery = "INSERT INTO AGGREGATE (Date_ef, Time, Date_ex, Product_Id, Product_Name, BuyingPrice, SellingPrice) "
-							+ "VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-					try (PreparedStatement dmStatement = dmConnection.prepareStatement(dmQuery)) {
-
-						while (resultSet.next()) {
-							dmStatement.setString(1, resultSet.getString("Date_ef"));
-							dmStatement.setString(2, resultSet.getString("Time"));
-							dmStatement.setString(3, resultSet.getString("Date_ex"));
-							dmStatement.setInt(4, resultSet.getInt("Product_Id"));
-							dmStatement.setString(5, resultSet.getString("Product_Name"));
-							dmStatement.setDouble(6, resultSet.getDouble("BuyingPrice"));
-							dmStatement.setDouble(7, resultSet.getDouble("SellingPrice"));
-
-							dmStatement.addBatch();
-						}
-						System.out.println("Loading from datawarehouse to datamart successly !");
-						dmStatement.executeBatch();
-						dmConnection.commit();
-					}
-				} catch (SQLException e) {
-					// Handle exceptions and possibly rollback the transaction
-					dmConnection.rollback();
-					e.printStackTrace();
-				} finally {
-					// Enable autocommit for Data Mart connection (optional, depending on your
-					// application logic)
-					dmConnection.setAutoCommit(true);
-
-					// Close the Data Mart connection
-					dmConnection.close();
-				}
-			}
-
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-	}
-
-// Update ngày hết hạn
-	public static void updateDateEx() {
-		try {
-			// Connect to Data Mart
-			Connection dmConnection = cof.getConnectionFromProperties("datamart");
-
-			try {
-				// Disable autocommit for Data Mart connection
-				dmConnection.setAutoCommit(false);
-
-				// Find the maximum time value
-				String maxTimeQuery = "SELECT MAX(Time) AS MaxTime FROM AGGREGATE";
-
-				try (PreparedStatement maxTimeStatement = dmConnection.prepareStatement(maxTimeQuery);
-						ResultSet maxTimeResult = maxTimeStatement.executeQuery()) {
-
-					if (maxTimeResult.next()) {
-						// Get the maximum time value
-						String maxTime = maxTimeResult.getString("MaxTime");
-
-						// Update Date_ex where Time is the maximum
-						String updateQuery = "UPDATE AGGREGATE SET Date_ex = CURDATE() WHERE Time = ?";
-
-						try (PreparedStatement updateStatement = dmConnection.prepareStatement(updateQuery)) {
-							updateStatement.setString(1, maxTime);
-							updateStatement.executeUpdate();
-							dmConnection.commit();
-							System.out.println("Update Date_ex successfully!");
-						}
-					}
-				}
-			} catch (SQLException e) {
-				// Handle exceptions and possibly rollback the transaction
-				dmConnection.rollback();
-				e.printStackTrace();
-			} finally {
-				// Enable autocommit for Data Mart connection (optional, depending on your
-				// application logic)
-				dmConnection.setAutoCommit(true);
-
-				// Close the Data Mart connection
-				dmConnection.close();
-			}
-
-		} catch (SQLException e) {
-			e.printStackTrace();
 		}
 	}
 

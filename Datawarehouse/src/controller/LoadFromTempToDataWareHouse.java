@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.Objects;
 import model.Config;
 import model.Log;
@@ -14,7 +15,7 @@ public class LoadFromTempToDataWareHouse {
 	private static Log log = new Log();
 	private static Config cof = new Config();
 	private static long startTime = System.currentTimeMillis();
-	private static long duration = 1 * 60 * 1000;
+	private static long duration = 0 * 60 * 1000;
 
 //	1. Xóa dữ liệu trong bảng fact
 	public static void truncateProductFactTable() {
@@ -159,9 +160,13 @@ public class LoadFromTempToDataWareHouse {
 			if (hasDataInProductDim()) {
 				// Nếu có dữ liệu, cập nhật dữ liệu từ TEMP vào Product_dim
 				updateDataFromTempToProductDim();
+				log.logInfo("Dữ liệu của Product_dim đã được cập nhật");
+				log.insertLog("Tranform", "Dữ liệu của Product_dim đã được cập nhật", 1, 6);
 			} else {
 				// Nếu không có dữ liệu, tải dữ liệu từ TEMP vào Product_dim
 				insertDataFromTempToProductDim();
+				log.logInfo("Tải dữ liệu từ temp sang Product_dim thành công");
+				log.insertLog("Loaded", "Tải dữ liệu từ temp sang Product_dim thành công", 1, 8);
 			}
 			log.logInfo("Load and update process completed successfully.");
 		} catch (Exception e) {
@@ -195,83 +200,127 @@ public class LoadFromTempToDataWareHouse {
 		}
 	}
 
-//7. Load dữ liệu từ staging sang Datawarehouse
-	public void loadDataFromTempToDataWarehouse() {
-		// Kiểm tra xem log mới nhất có Status ID là 7 không
-		if (log.latestLogHasStatus()) {
-			log.logInfo("Dừng quá trình tải dữ liệu");
-			log.insertLog("Error", "Tiến trình đang được khởi tạo vui lòng chờ", 1, 10);
-			return;
-		}
+	public static void updateDateExToCurrentDateId() {
+	    // Kết nối đến Data Mart
+		try (Connection dmConnection = cof.connectToDatabase("datawarehouse")) {
+		    dmConnection.setAutoCommit(false);
 
-		// Ghi log thông báo bắt đầu quá trình tải dữ liệu
-		log.insertLog("Loading", "Data Loading TEMP to Product_fact ", 1, 7);
-		log.logInfo("Đang tải dữ liệu....");
+		    // Lấy id cho ngày hiện tại từ Date_dim
+		    String currentDateIdQuery = "SELECT d_id FROM Date_dim WHERE full_date = CURRENT_DATE";
 
-		// Chờ trong khoảng thời gian đã định
-		while (System.currentTimeMillis() - startTime < duration) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
+		    // Thực hiện truy vấn
+		    try (PreparedStatement currentDateIdStatement = dmConnection.prepareStatement(currentDateIdQuery);
+		         ResultSet currentDateIdResult = currentDateIdStatement.executeQuery()) {
 
-		// Cắt bỏ dữ liệu trong bảng Product_fact
-		truncateProductFactTable();
+		        if (currentDateIdResult.next()) {
+		            // Lấy id cho ngày hiện tại
+		            int currentDateId = currentDateIdResult.getInt("d_id");
 
-		// Tải dữ liệu từ TEMP vào Product_dim
-		loadDataFromTempToProductDim();
+		            // Cập nhật Date_ex thành date_id của ngày hiện tại
+		            String updateQuery = "UPDATE Product_fact SET Date_ex = ? WHERE Time = (SELECT MAX(Time) FROM Product_fact)";
 
-		// Kết nối đến cơ sở dữ liệu staging và data warehouse
-		try (Connection stagingConnection = cof.connectToDatabase("staging");
-				Connection dataWarehouseConnection = cof.connectToDatabase("datawarehouse")) {
+		            // Thực hiện cập nhật
+		            try (PreparedStatement updateStatement = dmConnection.prepareStatement(updateQuery)) {
+		                updateStatement.setInt(1, currentDateId);
+		                updateStatement.executeUpdate();
+		                dmConnection.commit();
+		            }
+		        }
+		    }
 
-			// Câu truy vấn SQL để chọn dữ liệu từ bảng staging kết hợp với date_dim
-			String selectQuery = "SELECT date_dim.d_id, temp.Id, temp.Time, temp.BuyingPrice, temp.SellingPrice "
-					+ "FROM giavang_staging.temp "
-					+ "JOIN giavang_datawarehouse.date_dim ON temp.Date = date_dim.full_date";
-
-			// Câu truy vấn SQL để chèn dữ liệu vào bảng data warehouse
-			String insertQuery = "INSERT INTO giavang_datawarehouse.product_fact (Date_Id, Time, Date_ex, Product_Id, BuyingPrice, SellingPrice, Status) "
-					+ "VALUES (?, ?, STR_TO_DATE('31/12/9999', '%d/%m/%Y'), ?, ?, ?, 8)";
-
-			// Thực hiện các câu truy vấn SQL
-			try (PreparedStatement selectStatement = stagingConnection.prepareStatement(selectQuery);
-					ResultSet resultSet = selectStatement.executeQuery();
-					PreparedStatement insertStatement = dataWarehouseConnection.prepareStatement(insertQuery)) {
-
-				// Xử lý kết quả và chèn dữ liệu vào bảng data warehouse
-				while (resultSet.next() && (System.currentTimeMillis() - startTime) < (3 * 60 * 1000)) {
-					int dateId = resultSet.getInt("d_id");
-					int tempId = resultSet.getInt("Id");
-					String time = resultSet.getString("Time");
-					String buyingPrice = resultSet.getString("BuyingPrice");
-					String sellingPrice = resultSet.getString("SellingPrice");
-
-					insertStatement.setInt(1, dateId);
-					insertStatement.setString(2, time);
-					insertStatement.setInt(3, tempId);
-					insertStatement.setString(4, buyingPrice);
-					insertStatement.setString(5, sellingPrice);
-
-					insertStatement.executeUpdate();
-				}
-
-				// Ghi log thông báo thành công
-				log.logInfo("Dữ liệu được tải từ TEMP vào Product_fact thành công.");
-				log.insertLog("Loaded", "Dữ liệu được tải từ TEMP vào Product_fact thành công.", 1, 8);
-			} catch (SQLException e) {
-				// Ghi log lỗi nếu có ngoại lệ trong quá trình tải dữ liệu
-				log.logError("Lỗi khi tải dữ liệu từ TEMP vào Product_fact: " + e.getMessage(), e);
-				log.insertLog("Load Data", "Lỗi khi tải dữ liệu từ TEMP vào Product_fact: " + e.getMessage(), 1, 9);
-			}
 		} catch (SQLException e) {
-			// Ghi log lỗi không mong muốn nếu có ngoại lệ trong quá trình kết nối cơ sở dữ
-			// liệu
-			log.logError("Lỗi không mong muốn: " + e.getMessage(), e);
-			log.insertLog("Load Data", "Lỗi không mong muốn: " + e.getMessage(), 1, 9);
+		    // Xử lý ngoại lệ và có thể quay lại giao dịch
+		    e.printStackTrace();
+		} finally {
+		    // Bật chế độ autocommit cho kết nối Data Mart và đóng kết nối
+		    try (Connection dmConnection = cof.connectToDatabase("datawarehouse")) {
+		        dmConnection.setAutoCommit(true);
+		    } catch (SQLException e) {
+		        e.printStackTrace();
+		    }
 		}
 	}
+	
+	//7. Load dữ liệu từ staging sang Datawarehouse
+		public void loadDataFromTempToDataWarehouse() throws SQLException {
+			
+			cof.updateConfigData(cof.connectToDatabase("control"), "staging", "New Title","DataWarehouse", 2);
+			
+			// Kiểm tra xem log mới nhất có Status ID là 7 không
+			if (log.latestLogHasStatus()) {
+				log.logInfo("Dừng quá trình tải dữ liệu");
+				log.insertLog("Error", "Tiến trình đang được khởi tạo vui lòng chờ", 1, 10);
+				return;
+			}
+
+			// Ghi log thông báo bắt đầu quá trình tải dữ liệu
+			log.insertLog("Loading", "Data Loading TEMP to Product_fact ", 1, 7);
+			log.logInfo("Đang tải dữ liệu....");
+
+			// Chờ trong khoảng thời gian đã định
+			while (System.currentTimeMillis() - startTime < duration) {
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+
+			// Tải dữ liệu từ TEMP vào Product_dim
+			loadDataFromTempToProductDim();
+			updateDateExToCurrentDateId();
+
+			// Kết nối đến cơ sở dữ liệu staging và data warehouse
+			try (Connection stagingConnection = cof.connectToDatabase("staging");
+					Connection dataWarehouseConnection = cof.connectToDatabase("datawarehouse")) {
+
+				// Câu truy vấn SQL để chọn dữ liệu từ bảng staging kết hợp với date_dim
+				String selectQuery = "SELECT date_dim.d_id, temp.Id, temp.BuyingPrice, temp.SellingPrice, CURRENT_TIME() AS Time "
+						+ "FROM giavang_staging.temp "
+						+ "JOIN giavang_datawarehouse.date_dim ON temp.Date = date_dim.full_date";
+
+				// Câu truy vấn SQL để chèn dữ liệu vào bảng data warehouse
+				String insertQuery = "INSERT INTO giavang_datawarehouse.product_fact (Date_ef, Time, Date_ex, Product_Id, BuyingPrice, SellingPrice, Status) "
+						+ "VALUES (?, ?, 7585, ?, ?, ?, 8)";
+
+				// Thực hiện các câu truy vấn SQL
+				try (PreparedStatement selectStatement = stagingConnection.prepareStatement(selectQuery);
+						ResultSet resultSet = selectStatement.executeQuery();
+						PreparedStatement insertStatement = dataWarehouseConnection.prepareStatement(insertQuery)) {
+
+					// Xử lý kết quả và chèn dữ liệu vào bảng data warehouse
+					while (resultSet.next()) {
+						
+						int date_ef = resultSet.getInt("d_id");
+						int tempId = resultSet.getInt("Id");
+						String time = resultSet.getString("Time");
+						String buyingPrice = resultSet.getString("BuyingPrice");
+						String sellingPrice = resultSet.getString("SellingPrice");
+						
+						insertStatement.setInt(1, date_ef);
+						insertStatement.setString(2, time);
+	                    insertStatement.setInt(3, tempId);
+	                    insertStatement.setString(4, buyingPrice);
+	                    insertStatement.setString(5, sellingPrice);
+	                   
+
+						insertStatement.executeUpdate();
+					}
+
+					// Ghi log thông báo thành công
+					log.logInfo("Dữ liệu được tải từ TEMP vào Product_fact thành công.");
+					log.insertLog("Loaded", "Dữ liệu được tải từ TEMP vào Product_fact thành công.", 1, 8);
+				} catch (SQLException e) {
+					// Ghi log lỗi nếu có ngoại lệ trong quá trình tải dữ liệu
+					log.logError("Lỗi khi tải dữ liệu từ TEMP vào Product_fact: " + e.getMessage(), e);
+					log.insertLog("Load Data", "Lỗi khi tải dữ liệu từ TEMP vào Product_fact: " + e.getMessage(), 1, 9);
+				}
+			} catch (SQLException e) {
+				// Ghi log lỗi không mong muốn nếu có ngoại lệ trong quá trình kết nối cơ sở dữ
+				// liệu
+				log.logError("Lỗi không mong muốn: " + e.getMessage(), e);
+				log.insertLog("Load Data", "Lỗi không mong muốn: " + e.getMessage(), 1, 9);
+			}
+		}
 
 }
